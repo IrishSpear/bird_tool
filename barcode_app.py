@@ -42,6 +42,7 @@ from pylibdmtx.pylibdmtx import encode
 # Printer settings.
 PRINTER_NAME = os.environ.get("BARCODE_PRINTER", "IDPRT_SP410")
 MEDIA_OPTION = os.environ.get("BARCODE_MEDIA", "Custom.2x1in")
+WINDOWS_PRINT_PORT = os.environ.get("WINDOWS_PRINT_PORT", "Port_#0001.Hub_#0002")
 DPI = 203  # Typical resolution for 203 dpi thermal printers.
 LABEL_WIDTH_IN = 2
 LABEL_HEIGHT_IN = 1
@@ -138,6 +139,9 @@ def _pick_print_command() -> tuple[list[str], str]:
 
     system = platform.system()
 
+    if system == "Windows" and shutil.which("print") and WINDOWS_PRINT_PORT:
+        return ["print"], "win-port"
+
     if shutil.which("lp"):
         return ["lp"], "lp"
 
@@ -230,6 +234,16 @@ def send_to_printer(image: Image.Image, copies: int = 1, *, root: tk.Tk | None =
 
             for _ in range(copies):
                 command = command_prefix + ["-S", server, "-P", queue, "-o", "l", tmp_path]
+                subprocess.run(command, check=True)
+
+        elif style == "win-port":
+            if not WINDOWS_PRINT_PORT:
+                raise SystemError(
+                    "No Windows printer port configured. Set WINDOWS_PRINT_PORT to the desired port name."
+                )
+
+            for _ in range(copies):
+                command = command_prefix + [f"/D:{WINDOWS_PRINT_PORT}", tmp_path]
                 subprocess.run(command, check=True)
 
         else:  # pragma: no cover - defensive guard
