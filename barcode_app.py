@@ -11,16 +11,31 @@ the default printer.
 """
 from __future__ import annotations
 
+import importlib.util
 import os
 import subprocess
 import tempfile
 from dataclasses import dataclass
 from typing import Optional
 
-from PIL import Image, ImageDraw, ImageFont
-from pylibdmtx.pylibdmtx import encode
 import tkinter as tk
 from tkinter import messagebox, simpledialog
+
+
+def _ensure_dependency(module_name: str, install_hint: str) -> None:
+    """Fail fast with a clear message when optional dependencies are missing."""
+
+    if importlib.util.find_spec(module_name) is None:
+        raise SystemExit(
+            f"Missing dependency '{module_name}'. Install requirements with: {install_hint}"
+        )
+
+
+_ensure_dependency("PIL", "pip install -r requirements.txt")
+_ensure_dependency("pylibdmtx", "pip install -r requirements.txt")
+
+from PIL import Image, ImageDraw, ImageFont
+from pylibdmtx.pylibdmtx import encode
 
 # Printer settings.
 PRINTER_NAME = os.environ.get("BARCODE_PRINTER", "IDPRT_SP410")
