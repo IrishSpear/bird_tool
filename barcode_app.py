@@ -128,23 +128,23 @@ def render_label(label: LabelData) -> Image.Image:
     return image
 
 
-def _pick_print_command() -> list[str]:
+def _pick_print_command() -> tuple[list[str], str]:
     """Choose a platform-appropriate print command.
 
-    Returns the command list prefix (e.g. ["lp"] or ["lpr"]). Raises a
-    SystemError with guidance when no supported command exists.
+    Returns a tuple of (command_prefix, style) where ``style`` is one of
+    ``"lp"``, ``"lpr-posix"``, or ``"lpr-windows"``. Raises a SystemError with
+    guidance when no supported command exists.
     """
 
-    candidates = [
-        ["lp"],  # Common on macOS/Linux
-        ["lpr"],  # Windows print services / optional feature
-    ]
-
-    for candidate in candidates:
-        if shutil.which(candidate[0]):
-            return candidate
-
     system = platform.system()
+
+    if shutil.which("lp"):
+        return ["lp"], "lp"
+
+    if shutil.which("lpr"):
+        style = "lpr-windows" if system == "Windows" else "lpr-posix"
+        return ["lpr"], style
+
     if system == "Windows":
         raise SystemError(
             "No command-line printer interface found. Enable the Windows 'Print and "
@@ -163,22 +163,46 @@ def send_to_printer(image: Image.Image, copies: int = 1) -> None:
         image.save(tmp.name, "PNG")
         tmp_path = tmp.name
 
-    command = _pick_print_command() + [
-        "-n",
-        str(copies),
-        "-o",
-        "fit-to-page",
-        "-o",
-        f"media={MEDIA_OPTION}",
-    ]
-    if PRINTER_NAME:
-        command.extend(["-d", PRINTER_NAME])
-
-    # File path must come last for both lp and lpr.
-    command.append(tmp_path)
+    command_prefix, style = _pick_print_command()
 
     try:
-        subprocess.run(command, check=True)
+        if style == "lp":
+            command = command_prefix + [
+                "-n",
+                str(copies),
+                "-o",
+                "fit-to-page",
+                "-o",
+                f"media={MEDIA_OPTION}",
+            ]
+            if PRINTER_NAME:
+                command.extend(["-d", PRINTER_NAME])
+            command.append(tmp_path)
+            subprocess.run(command, check=True)
+
+        elif style == "lpr-posix":
+            command = command_prefix + ["-#", str(copies), "-o", "fit-to-page", "-o", f"media={MEDIA_OPTION}"]
+            if PRINTER_NAME:
+                command.extend(["-P", PRINTER_NAME])
+            command.append(tmp_path)
+            subprocess.run(command, check=True)
+
+        elif style == "lpr-windows":
+            server = os.environ.get("LPR_SERVER")
+            queue = os.environ.get("LPR_QUEUE") or PRINTER_NAME
+            if not server or not queue:
+                raise SystemError(
+                    "Windows 'lpr' requires a server (-S) and queue (-P). Set the "
+                    "LPR_SERVER and LPR_QUEUE environment variables (or BARCODE_PRINTER "
+                    "for the queue name) and ensure the LPR Port Monitor feature is enabled."
+                )
+
+            for _ in range(copies):
+                command = command_prefix + ["-S", server, "-P", queue, "-o", "l", tmp_path]
+                subprocess.run(command, check=True)
+
+        else:  # pragma: no cover - defensive guard
+            raise SystemError(f"Unsupported print style: {style}")
     except FileNotFoundError as exc:
         raise SystemError(
             "Could not invoke the system print command. Ensure 'lp' or 'lpr' is "
