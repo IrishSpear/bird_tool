@@ -4,7 +4,7 @@ A simple Tkinter interface for creating 1" x 2" barcode labels with a centered D
 
 ## Requirements
 - Python 3.9 or newer
-- A command-line print utility: `lp` (CUPS/macOS/Linux) or `lpr`/`print` (Windows Print Services)
+- A command-line print utility: `lp` (CUPS/macOS/Linux) or `print`/`lpr` (Windows Print Services)
 - Printer configured in your OS (default name `IDPRT_SP410`, override with `BARCODE_PRINTER`)
 - Dependencies from `requirements.txt`
 
@@ -15,15 +15,8 @@ pip install -r requirements.txt
 ```
 
 ### Windows printing notes
-- Install the SP410 driver and set the printer as the default or use `BARCODE_PRINTER` to target it explicitly.
-- For USB-connected printers, the app prefers the built-in `print` command and targets the port named by `WINDOWS_PRINT_PORT`. It defaults to `Port_#0001.Hub_#0002` per your setup. If your port differs, set it before running:
-
-  ```powershell
-  set WINDOWS_PRINT_PORT=USB001
-  python barcode_app.py
-  ```
-
-- If you see `WinError 2` or "system cannot find the file specified," enable **Print and Document Services → LPR Port Monitor** in Windows Optional Features so `lpr` is available on your PATH.
+- Install the SP410 driver and set the printer as the default. The app now uses the built-in `print` command to send jobs through the Windows print spooler. If you need to target a specific queue, set `BARCODE_PRINTER` to that printer's share name.
+- If you see `WinError 2` or "system cannot find the file specified," enable **Print and Document Services → LPR Port Monitor** in Windows Optional Features so `lpr` is available on your PATH as a fallback.
 - The Windows `lpr` command requires a server (`-S`) and queue (`-P`). The app will prompt for these if they are not set and will cache what you enter for the session. You can also set them up front via `LPR_SERVER` and `LPR_QUEUE` (or `BARCODE_PRINTER` for the queue name), e.g.:
 
   ```powershell

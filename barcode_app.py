@@ -5,9 +5,10 @@ The app collects booth, optional inventory number, description, and a price in c
 (e.g. "400" -> $4.00). It renders a 1" x 2" label with a centered Data Matrix code,
 booth number on the top-left, description bottom-left, and price bottom-right.
 
-Labels are printed via the system ``lp`` command so the printer must be installed in
-CUPS. Set ``PRINTER_NAME`` below to target a specific printer or leave ``None`` to use
-the default printer.
+Labels are printed via the Windows ``print`` command (default printer unless
+``BARCODE_PRINTER`` is set) or via ``lp``/``lpr`` on other platforms. Ensure the
+printer is installed in your OS print queue and set ``PRINTER_NAME`` below (or
+``BARCODE_PRINTER`` in the environment) to target a specific printer when desired.
 """
 from __future__ import annotations
 
@@ -42,7 +43,6 @@ from pylibdmtx.pylibdmtx import encode
 # Printer settings.
 PRINTER_NAME = os.environ.get("BARCODE_PRINTER", "IDPRT_SP410")
 MEDIA_OPTION = os.environ.get("BARCODE_MEDIA", "Custom.2x1in")
-WINDOWS_PRINT_PORT = os.environ.get("WINDOWS_PRINT_PORT", "Port_#0001.Hub_#0002")
 DPI = 203  # Typical resolution for 203 dpi thermal printers.
 LABEL_WIDTH_IN = 2
 LABEL_HEIGHT_IN = 1
@@ -133,14 +133,14 @@ def _pick_print_command() -> tuple[list[str], str]:
     """Choose a platform-appropriate print command.
 
     Returns a tuple of (command_prefix, style) where ``style`` is one of
-    ``"lp"``, ``"lpr-posix"``, or ``"lpr-windows"``. Raises a SystemError with
-    guidance when no supported command exists.
+    ``"win-print"``, ``"lp"``, ``"lpr-posix"``, or ``"lpr-windows"``. Raises a
+    SystemError with guidance when no supported command exists.
     """
 
     system = platform.system()
 
-    if system == "Windows" and shutil.which("print") and WINDOWS_PRINT_PORT:
-        return ["print"], "win-port"
+    if system == "Windows" and shutil.which("print"):
+        return ["print"], "win-print"
 
     if shutil.which("lp"):
         return ["lp"], "lp"
@@ -153,7 +153,7 @@ def _pick_print_command() -> tuple[list[str], str]:
         raise SystemError(
             "No command-line printer interface found. Enable the Windows 'Print and "
             "Document Services' optional feature for 'LPR Port Monitor', or install "
-            "CUPS-compatible tools and ensure 'lp' or 'lpr' is on PATH."
+            "CUPS-compatible tools and ensure 'print', 'lp', or 'lpr' is on PATH."
         )
 
     raise SystemError(
@@ -208,7 +208,15 @@ def send_to_printer(image: Image.Image, copies: int = 1, *, root: tk.Tk | None =
     command_prefix, style = _pick_print_command()
 
     try:
-        if style == "lp":
+        if style == "win-print":
+            for _ in range(copies):
+                command = command_prefix.copy()
+                if PRINTER_NAME:
+                    command.append(f"/D:{PRINTER_NAME}")
+                command.append(tmp_path)
+                subprocess.run(command, check=True)
+
+        elif style == "lp":
             command = command_prefix + [
                 "-n",
                 str(copies),
@@ -234,16 +242,6 @@ def send_to_printer(image: Image.Image, copies: int = 1, *, root: tk.Tk | None =
 
             for _ in range(copies):
                 command = command_prefix + ["-S", server, "-P", queue, "-o", "l", tmp_path]
-                subprocess.run(command, check=True)
-
-        elif style == "win-port":
-            if not WINDOWS_PRINT_PORT:
-                raise SystemError(
-                    "No Windows printer port configured. Set WINDOWS_PRINT_PORT to the desired port name."
-                )
-
-            for _ in range(copies):
-                command = command_prefix + [f"/D:{WINDOWS_PRINT_PORT}", tmp_path]
                 subprocess.run(command, check=True)
 
         else:  # pragma: no cover - defensive guard
