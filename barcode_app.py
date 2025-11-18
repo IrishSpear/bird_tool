@@ -13,6 +13,8 @@ from __future__ import annotations
 
 import importlib.util
 import os
+import platform
+import shutil
 import subprocess
 import tempfile
 from dataclasses import dataclass
@@ -126,12 +128,50 @@ def render_label(label: LabelData) -> Image.Image:
     return image
 
 
+def _pick_print_command() -> list[str]:
+    """Choose a platform-appropriate print command.
+
+    Returns the command list prefix (e.g. ["lp"] or ["lpr"]). Raises a
+    SystemError with guidance when no supported command exists.
+    """
+
+    candidates = [
+        ["lp"],  # Common on macOS/Linux
+        ["lpr"],  # Windows print services / optional feature
+    ]
+
+    for candidate in candidates:
+        if shutil.which(candidate[0]):
+            return candidate
+
+    system = platform.system()
+    if system == "Windows":
+        raise SystemError(
+            "No command-line printer interface found. Enable the Windows 'Print and "
+            "Document Services' optional feature for 'LPR Port Monitor', or install "
+            "CUPS-compatible tools and ensure 'lp' or 'lpr' is on PATH."
+        )
+
+    raise SystemError(
+        "No 'lp' or 'lpr' command found. Install CUPS or add a compatible print "
+        "utility to your PATH."
+    )
+
+
 def send_to_printer(image: Image.Image, copies: int = 1) -> None:
     with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
         image.save(tmp.name, "PNG")
         tmp_path = tmp.name
 
-    command = ["lp", tmp_path, "-n", str(copies), "-o", "fit-to-page", "-o", f"media={MEDIA_OPTION}"]
+    command = _pick_print_command() + [
+        tmp_path,
+        "-n",
+        str(copies),
+        "-o",
+        "fit-to-page",
+        "-o",
+        f"media={MEDIA_OPTION}",
+    ]
     if PRINTER_NAME:
         command.extend(["-d", PRINTER_NAME])
 
