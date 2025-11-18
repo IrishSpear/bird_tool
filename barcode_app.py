@@ -164,7 +164,6 @@ def send_to_printer(image: Image.Image, copies: int = 1) -> None:
         tmp_path = tmp.name
 
     command = _pick_print_command() + [
-        tmp_path,
         "-n",
         str(copies),
         "-o",
@@ -175,8 +174,17 @@ def send_to_printer(image: Image.Image, copies: int = 1) -> None:
     if PRINTER_NAME:
         command.extend(["-d", PRINTER_NAME])
 
+    # File path must come last for both lp and lpr.
+    command.append(tmp_path)
+
     try:
         subprocess.run(command, check=True)
+    except FileNotFoundError as exc:
+        raise SystemError(
+            "Could not invoke the system print command. Ensure 'lp' or 'lpr' is "
+            "installed and available on PATH (Windows may require enabling the "
+            "LPR Port Monitor optional feature)."
+        ) from exc
     finally:
         os.remove(tmp_path)
 
