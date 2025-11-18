@@ -158,7 +158,45 @@ def _pick_print_command() -> tuple[list[str], str]:
     )
 
 
-def send_to_printer(image: Image.Image, copies: int = 1) -> None:
+_cached_windows_target: tuple[str, str] | None = None
+
+
+def _resolve_windows_lpr_target(root: tk.Tk | None = None) -> tuple[str, str]:
+    """Return the (server, queue) tuple for Windows ``lpr``.
+
+    Prefer environment variables, but if they are missing and a Tk root is
+    available, prompt the user interactively. Values are cached for the current
+    session to avoid repeated prompts.
+    """
+
+    global _cached_windows_target
+
+    if _cached_windows_target:
+        return _cached_windows_target
+
+    server = os.environ.get("LPR_SERVER")
+    queue = os.environ.get("LPR_QUEUE") or PRINTER_NAME
+
+    if (not server or not queue) and root is not None:
+        server = server or simpledialog.askstring(
+            "LPR Server", "Enter the LPR server hostname or IP address:", parent=root
+        )
+        queue = queue or simpledialog.askstring(
+            "LPR Queue", "Enter the LPR queue/share name:", parent=root
+        )
+
+    if server and queue:
+        _cached_windows_target = (server.strip(), queue.strip())
+        return _cached_windows_target
+
+    raise SystemError(
+        "Windows 'lpr' requires a server (-S) and queue (-P). Provide them via "
+        "LPR_SERVER and LPR_QUEUE (or BARCODE_PRINTER), or supply values when "
+        "prompted. Ensure the LPR Port Monitor feature is enabled."
+    )
+
+
+def send_to_printer(image: Image.Image, copies: int = 1, *, root: tk.Tk | None = None) -> None:
     with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
         image.save(tmp.name, "PNG")
         tmp_path = tmp.name
@@ -188,14 +226,7 @@ def send_to_printer(image: Image.Image, copies: int = 1) -> None:
             subprocess.run(command, check=True)
 
         elif style == "lpr-windows":
-            server = os.environ.get("LPR_SERVER")
-            queue = os.environ.get("LPR_QUEUE") or PRINTER_NAME
-            if not server or not queue:
-                raise SystemError(
-                    "Windows 'lpr' requires a server (-S) and queue (-P). Set the "
-                    "LPR_SERVER and LPR_QUEUE environment variables (or BARCODE_PRINTER "
-                    "for the queue name) and ensure the LPR Port Monitor feature is enabled."
-                )
+            server, queue = _resolve_windows_lpr_target(root=root)
 
             for _ in range(copies):
                 command = command_prefix + ["-S", server, "-P", queue, "-o", "l", tmp_path]
@@ -255,7 +286,7 @@ def print_label_flow(root: tk.Tk) -> None:
 
         try:
             image = render_label(data)
-            send_to_printer(image, copies=copies)
+            send_to_printer(image, copies=copies, root=root)
             messagebox.showinfo("Printed", f"Sent {copies} label(s) to the printer.")
         except Exception as exc:  # pragma: no cover - user feedback
             messagebox.showerror("Print failed", str(exc))

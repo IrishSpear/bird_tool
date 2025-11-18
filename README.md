@@ -17,7 +17,7 @@ pip install -r requirements.txt
 ### Windows printing notes
 - Install the SP410 driver and set the printer as the default or use `BARCODE_PRINTER` to target it explicitly.
 - If you see `WinError 2` or "system cannot find the file specified," enable **Print and Document Services → LPR Port Monitor** in Windows Optional Features so `lpr` is available on your PATH.
-- The Windows `lpr` command requires a server (`-S`) and queue (`-P`). Set the environment variables `LPR_SERVER` and `LPR_QUEUE` (or `BARCODE_PRINTER` for the queue name) so the app can construct the correct call, e.g.:
+- The Windows `lpr` command requires a server (`-S`) and queue (`-P`). The app will prompt for these if they are not set and will cache what you enter for the session. You can also set them up front via `LPR_SERVER` and `LPR_QUEUE` (or `BARCODE_PRINTER` for the queue name), e.g.:
 
   ```powershell
   set LPR_SERVER=192.168.1.50
